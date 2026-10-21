@@ -1,0 +1,13 @@
+# 核心（训练与 PyTorch 量化）
+torch>=2.6.0
+torchvision>=0.21.0
+numpy>=2.0
+matplotlib>=3.9
+
+# 部署引擎对比
+tensorrt>=11.4        # 需驱动 580+；TRT 11 移除了旧 int8 校准 API（见 docs/04 踩坑记录）
+onnx>=1.17
+onnxruntime-gpu>=1.20 # 注意 CUDA 12/13 二进制匹配，1.31 需 CUDA 13（见 docs/04 踩坑记录）
+
+# weight-only 量化（适配 torch 2.6；torch >= 2.11 需换新版 torchao）
+torchao==0.13.0
