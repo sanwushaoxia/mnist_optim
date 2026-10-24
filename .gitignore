@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 数据（脚本自动下载）
+data/
+data_fmnist/
+
+# 训练/量化产物（脚本自动生成）
+models/
+
+# 环境与工具
+.zcode/
+.ipynb_checkpoints/
