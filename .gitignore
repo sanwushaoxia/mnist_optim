@@ -13,3 +13,4 @@ models/
 # 环境与工具
 .zcode/
 .ipynb_checkpoints/
+.zcode/
