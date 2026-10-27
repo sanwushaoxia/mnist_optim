@@ -204,7 +204,7 @@ def hw_precision_matrix():
     # 第 2 行 = 测试框架，第 3 行 = 耗时，第 4 行 = 该精度下模型体积
     notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.590 ms\n12.64 MB",
               "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.4 ms\n6.47 MB",
-              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms\n—",
+              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms\n6.32 MB",
               "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.242 ms*\n3.20 MB",
               "no operators\nnot tested\n—"],
              ["CUDA cores (no TC)\nTensorRT\n0.180 ms\n12.74 MB",
