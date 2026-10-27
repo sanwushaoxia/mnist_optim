@@ -201,7 +201,7 @@ def hw_precision_matrix():
     ], dtype=float)
     im = ax.imshow(data, cmap="RdYlGn", vmin=0, vmax=3, aspect="auto")
     notes = [["native & tuned\n0.59 ms", "no hw support\n(simulated)", "no hw support\n40x slower", "VNNI native\n0.24 ms*", "no operators"],
-             ["no Tensor Core", "Tensor Core 2x\n0.12 ms*", "TC half speed\n0.16 ms", "TC via TRT", "slow on small GEMM"]]
+             ["CUDA cores only\n(fp32 skips TC)", "Tensor Core 2x\n0.12 ms*", "TC half speed\n0.16 ms", "TC via TRT", "slow on small GEMM"]]
     for i in range(2):
         for j in range(5):
             ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=10)
