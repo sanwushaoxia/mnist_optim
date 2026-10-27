@@ -200,11 +200,11 @@ def hw_precision_matrix():
         [1, 3, 2, 3, 1],   # GPU
     ], dtype=float)
     im = ax.imshow(data, cmap="RdYlGn", vmin=0, vmax=3, aspect="auto")
-    notes = [["native & tuned\n0.59 ms", "no hw support\n(simulated)", "no hw support\n40x slower", "VNNI native\n0.24 ms*", "no operators"],
-             ["CUDA cores only\n(fp32 skips TC)", "Tensor Core 2x\n0.12 ms*", "TC half speed\n0.16 ms", "TC via TRT", "slow on small GEMM"]]
+    notes = [["native & tuned\n0.59 ms", "no hw support\n(simulated)", "no hw support\n40x slower: 22.4 ms", "VNNI native\n0.24 ms*", "no operators"],
+             ["CUDA cores only\n(fp32 skips TC)\n0.2-0.4 ms", "Tensor Core 2x\n0.12 ms*", "TC half speed\n0.16 ms", "TC via TRT\n0.1-0.2 ms", "GPU only\nsmall GEMM: ~20 ms"]]
     for i in range(2):
         for j in range(5):
-            ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=10)
+            ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=9.5)
     ax.set_xticks(range(5)); ax.set_xticklabels(cols, fontsize=12)
     ax.set_yticks(range(2)); ax.set_yticklabels(rows, fontsize=10.5)
     ax.set_title("Hardware-Precision Fit Matrix:  green = fast, red = slow / unsupported\n"
