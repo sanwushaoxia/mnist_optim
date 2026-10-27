@@ -193,23 +193,23 @@ def hw_precision_matrix():
     fig, ax = plt.subplots(figsize=(11, 5.2))
     plt.rcParams["font.family"] = "DejaVu Sans"  # 此图纯英文，用默认字体更清晰
     rows = ["CPU\n(AVX2+VNNI,\nno AMX)", "GPU\n(Ampere 8.6,\nconsumer)"]
-    cols = ["fp32", "fp16", "bf16", "int8", "int4"]
-    # 0=slow/unsupported, 1=fair, 2=fast, 3=fastest
+    cols = ["fp32", "bf16", "fp16", "int8", "int4"]
+    # 0=slow/unsupported, 1=fair, 2=fast, 3=fastest（列序：fp32→bf16→fp16 按精度谱系排列）
     data = np.array([
         [2, 0, 0, 3, 1],   # CPU
-        [1, 3, 2, 3, 1],   # GPU
+        [1, 2, 3, 3, 1],   # GPU
     ], dtype=float)
     im = ax.imshow(data, cmap="RdYlGn", vmin=0, vmax=3, aspect="auto", alpha=0.55)
     # 统一格式：第 1 行 = 计算单元/指令集（不支持则 no hw support），
     # 第 2 行 = 测试框架，第 3 行 = 耗时
     notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.590 ms",
-              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms",
               "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.4 ms",
+              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms",
               "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.242 ms*",
               "no operators\nnot tested"],
              ["CUDA cores (no TC)\nTensorRT\n0.180 ms",
-              "Tensor Core (TRT)\nTensorRT fp16\n0.125 ms*",
               "Tensor Core (TRT)\nTensorRT bf16\n0.158 ms",
+              "Tensor Core (TRT)\nTensorRT fp16\n0.125 ms*",
               "Tensor Core (TRT)\nTensorRT int8 QDQ\n0.085 ms*",
               "Tensor Core (tinygemm)\ntorchao int4 w-only\n16.05 ms"]]
     for i in range(2):
