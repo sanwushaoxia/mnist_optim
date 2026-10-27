@@ -202,16 +202,16 @@ def hw_precision_matrix():
     im = ax.imshow(data, cmap="RdYlGn", vmin=0, vmax=3, aspect="auto", alpha=0.55)
     # 统一格式：第 1 行 = 计算单元/指令集（不支持则 no hw support），
     # 第 2 行 = 测试框架，第 3 行 = 耗时
-    notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.59 ms",
+    notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.590 ms",
               "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms",
               "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.4 ms",
-              "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.24 ms*",
+              "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.242 ms*",
               "no operators\nnot tested"],
-             ["CUDA cores (no TC)\nTensorRT\n0.2-0.4 ms",
-              "Tensor Core (TRT)\nTensorRT fp16\n0.12 ms*",
-              "Tensor Core (TRT)\nTensorRT bf16\n0.16 ms",
-              "Tensor Core (TRT)\nTensorRT int8 QDQ\n0.1-0.2 ms",
-              "Tensor Core (tinygemm)\ntorchao int4 w-only\n~20 ms"]]
+             ["CUDA cores (no TC)\nTensorRT\n0.180 ms",
+              "Tensor Core (TRT)\nTensorRT fp16\n0.125 ms*",
+              "Tensor Core (TRT)\nTensorRT bf16\n0.158 ms",
+              "Tensor Core (TRT)\nTensorRT int8 QDQ\n0.085 ms*",
+              "Tensor Core (tinygemm)\ntorchao int4 w-only\n16.05 ms"]]
     for i in range(2):
         for j in range(5):
             ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=9.5)
