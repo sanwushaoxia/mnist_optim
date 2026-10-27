@@ -3,6 +3,7 @@
 训练一个 MNIST CNN（fp32 基线），对它做 bf16 / int8 动态 / int8 静态 / int4 / 2:4 稀疏等全部主流压缩，在 CPU（i5-13490F）和 GPU（RTX 3060）上用 PyTorch / TensorRT / ONNX Runtime 三种引擎全面对比体积、速度、精度——并解释**每个数字背后的硬件原因**。
 
 ![硬件-精度匹配矩阵](assets/hw_precision_matrix.png)
+*图：Hardware-Precision Fit Matrix（图中文字为英文）——绿 = 快、红 = 慢/不支持；星号 = 该硬件上的最优选择（CPU 选 int8 静态，GPU 选 fp16/int8）*
 
 ## 学习路径（按顺序读）
 

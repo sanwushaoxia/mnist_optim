@@ -188,25 +188,27 @@ def tradeoff_scatter():
     save(fig, "tradeoff_scatter.png")
 
 
-# ---------- 7. 硬件-精度匹配矩阵 ----------
+# ---------- 7. 硬件-精度匹配矩阵（英文，便于通用阅读） ----------
 def hw_precision_matrix():
-    fig, ax = plt.subplots(figsize=(10, 4.8))
-    rows = ["CPU\n(AVX2+VNNI\n无 AMX)", "GPU\n(Ampere 8.6\n消费卡)"]
+    fig, ax = plt.subplots(figsize=(11, 5.2))
+    plt.rcParams["font.family"] = "DejaVu Sans"  # 此图纯英文，用默认字体更清晰
+    rows = ["CPU\n(AVX2+VNNI,\nno AMX)", "GPU\n(Ampere 8.6,\nconsumer)"]
     cols = ["fp32", "fp16", "bf16", "int8", "int4"]
-    # 0=慢/不支持, 1=一般, 2=快, 3=最快
+    # 0=slow/unsupported, 1=fair, 2=fast, 3=fastest
     data = np.array([
         [2, 0, 0, 3, 1],   # CPU
         [1, 3, 2, 3, 1],   # GPU
     ], dtype=float)
     im = ax.imshow(data, cmap="RdYlGn", vmin=0, vmax=3, aspect="auto")
-    notes = [["一等公民\n0.59ms", "无原生支持\n(仿真)", "无原生支持\n慢40倍", "VNNI 原生\n0.24ms★", "算子缺失"],
-             ["无 TensorCore", "TC 双倍吞吐\n0.12ms★", "TC 半速\n0.16ms", "TC 支持\n(TRT)", "小矩阵不快"]]
+    notes = [["native & tuned\n0.59 ms", "no hw support\n(simulated)", "no hw support\n40x slower", "VNNI native\n0.24 ms*", "no operators"],
+             ["no Tensor Core", "Tensor Core 2x\n0.12 ms*", "TC half speed\n0.16 ms", "TC via TRT", "slow on small GEMM"]]
     for i in range(2):
         for j in range(5):
-            ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=9.5)
-    ax.set_xticks(range(5)); ax.set_xticklabels(cols, fontsize=11)
-    ax.set_yticks(range(2)); ax.set_yticklabels(rows, fontsize=10)
-    ax.set_title("硬件-精度匹配矩阵：绿=快 红=慢/不支持\n★=该硬件上的最优选择（CPU 选 int8 静态，GPU 选 fp16/int8）")
+            ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=10)
+    ax.set_xticks(range(5)); ax.set_xticklabels(cols, fontsize=12)
+    ax.set_yticks(range(2)); ax.set_yticklabels(rows, fontsize=10.5)
+    ax.set_title("Hardware-Precision Fit Matrix:  green = fast, red = slow / unsupported\n"
+                 "* = best choice per hardware  (CPU -> int8 static,  GPU -> fp16 / int8)", fontsize=11.5)
     save(fig, "hw_precision_matrix.png")
 
 
