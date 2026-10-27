@@ -29,6 +29,21 @@
 
 ![硬件-精度匹配矩阵](../assets/hw_precision_matrix.png)
 
+**图中术语说明**（矩阵每格三行：计算单元/指令集 → 测试框架 → 耗时）：
+
+| 术语 | 说明 |
+|---|---|
+| AVX2 / FMA | x86 向量指令（256 位宽），一条指令 8 个 fp32 运算，CPU 基线快路径 |
+| AVX_VNNI | int8 点积指令（`vpdpbusd`），一条指令 4 组 8-bit 乘加 |
+| AMX | Intel 服务器 CPU 矩阵引擎（Sapphire Rapids+），消费级桌面 CPU 没有 |
+| oneDNN | Intel CPU 深度学习算子库（PyTorch CPU 后端）；无硬件支持时用 fp32 模拟 fp16/bf16 |
+| CUDA cores | NVIDIA 通用 FP32 单元；fp32 在这里跑（Tensor Core 不支持 fp32 矩阵乘） |
+| Tensor Core (TC) | NVIDIA 矩阵乘专用单元（Ampere 三代：fp16/bf16/int8/int4），无 fp32 模式 |
+| TRT / int8 QDQ | TensorRT 推理引擎；QDQ = 通过 Quantize/Dequantize 节点的显式量化 |
+| tinygemm | CUDA int8/int4 weight-only GEMM kernel（torchao），按组反量化权重 |
+| PyTorch eager | PyTorch 默认逐算子执行方式（无图编译/融合） |
+| not tested | int4 在 CPU 上无算子（PyTorch/torchao 均未实现），本项目未测耗时 |
+
 **CPU 行**：fp32 是一等公民（0.59ms）；int8 最快（VNNI 原生，0.24ms）；fp16/bf16 **没有原生支持**，oneDNN 走仿真路径——把 bf16 转 fp32 再算，慢 40 倍。
 
 **GPU 行**：fp16 最快（Tensor Core 双倍吞吐）；bf16 快但只有 fp16 一半（消费卡差异，见第 4 节）；int8 需 TRT 才有 GPU kernel。

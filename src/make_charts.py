@@ -190,8 +190,7 @@ def tradeoff_scatter():
 
 # ---------- 7. 硬件-精度匹配矩阵（英文，便于通用阅读） ----------
 def hw_precision_matrix():
-    fig, axes = plt.subplots(2, 1, figsize=(11, 9.5), height_ratios=[2.1, 1])
-    ax = axes[0]
+    fig, ax = plt.subplots(figsize=(11, 5.2))
     plt.rcParams["font.family"] = "DejaVu Sans"  # 此图纯英文，用默认字体更清晰
     rows = ["CPU\n(AVX2+VNNI,\nno AMX)", "GPU\n(Ampere 8.6,\nconsumer)"]
     cols = ["fp32", "fp16", "bf16", "int8", "int4"]
@@ -220,29 +219,6 @@ def hw_precision_matrix():
     ax.set_yticks(range(2)); ax.set_yticklabels(rows, fontsize=10.5)
     ax.set_title("Hardware-Precision Fit Matrix:  green = fast, red = slow / unsupported\n"
                  "* = best choice per hardware  (CPU -> int8 static,  GPU -> fp16 / int8)", fontsize=11.5)
-
-    # 下方术语表：图中名词 + 说明
-    ax2 = axes[1]
-    ax2.axis("off")
-    glossary = [
-        ("AVX2 / FMA", "x86 CPU vector instructions (256-bit), 8 fp32 ops per instruction; the baseline fast path"),
-        ("AVX_VNNI", "int8 dot-product instruction (vpdpbusd); 4 groups of 8-bit multiply-add per instruction"),
-        ("AMX", "Intel server-CPU tile matrix engine (Sapphire Rapids+); absent on consumer desktop CPUs"),
-        ("oneDNN", "Intel's CPU DL kernel library; PyTorch CPU backend. Simulates fp16/bf16 via fp32 when no hw support"),
-        ("CUDA cores", "NVIDIA general FP32 units; fp32 runs here (no Tensor Core support for fp32 matmul)"),
-        ("Tensor Core (TC)", "NVIDIA matrix-multiply unit (Ampere 3rd gen: fp16/bf16/int8/int4), no fp32 mode"),
-        ("TRT / int8 QDQ", "TensorRT inference engine; QDQ = explicit quantization via Quantize/Dequantize nodes"),
-        ("tinygemm", "CUDA int8/int4 weight-only GEMM kernel (torchao); dequantizes weights per-group"),
-        ("PyTorch eager", "PyTorch default op-by-op execution (no graph compilation/fusion)"),
-        ("not tested", "int4 on CPU: no operators in PyTorch/torchao; timing never measured in this project"),
-    ]
-    ax2.set_xlim(0, 1); ax2.set_ylim(0, len(glossary))
-    ax2.text(0.0, len(glossary) - 0.25, "Glossary", fontsize=12, fontweight="bold")
-    for i, (term, desc) in enumerate(glossary):
-        y = len(glossary) - 1.35 - i
-        ax2.text(0.01, y, term, fontsize=9.5, fontweight="bold", va="top")
-        ax2.text(0.24, y, desc, fontsize=9.5, va="top", color="#333333")
-    fig.subplots_adjust(hspace=0.12)
     save(fig, "hw_precision_matrix.png")
 
 

@@ -3,7 +3,25 @@
 训练一个 MNIST CNN（fp32 基线），对它做 bf16 / int8 动态 / int8 静态 / int4 / 2:4 稀疏等全部主流压缩，在 CPU（i5-13490F）和 GPU（RTX 3060）上用 PyTorch / TensorRT / ONNX Runtime 三种引擎全面对比体积、速度、精度——并解释**每个数字背后的硬件原因**。
 
 ![硬件-精度匹配矩阵](assets/hw_precision_matrix.png)
-*图：Hardware-Precision Fit Matrix（图中文字为英文）——绿 = 快、红 = 慢/不支持；星号 = 该硬件上的最优选择（CPU 选 int8 静态，GPU 选 fp16/int8）*
+*图：Hardware-Precision Fit Matrix（图中文字为英文）——绿 = 快、红 = 慢/不支持；星号 = 该硬件上的最优选择。每格三行：计算单元/指令集 → 测试框架 → 耗时。*
+
+<details>
+<summary>图中术语说明</summary>
+
+| 术语 | 说明 |
+|---|---|
+| AVX2 / FMA | x86 向量指令（256 位宽），一条指令 8 个 fp32 运算 |
+| AVX_VNNI | int8 点积指令（`vpdpbusd`），一条指令 4 组 8-bit 乘加 |
+| AMX | Intel 服务器 CPU 矩阵引擎，消费级桌面 CPU 没有 |
+| oneDNN | Intel CPU 深度学习算子库（PyTorch CPU 后端）；无硬件支持时用 fp32 模拟 fp16/bf16 |
+| CUDA cores | NVIDIA 通用 FP32 单元，fp32 在这里跑 |
+| Tensor Core | NVIDIA 矩阵乘专用单元（fp16/bf16/int8/int4），无 fp32 模式 |
+| TRT / QDQ | TensorRT 引擎；QDQ = Quantize/Dequantize 节点显式量化 |
+| tinygemm | torchao 的 int8/int4 weight-only GPU kernel，按组反量化权重 |
+| PyTorch eager | PyTorch 默认逐算子执行（无编译/融合） |
+
+完整说明见 [docs/02 · 硬件架构](docs/02_hardware.md)。
+</details>
 
 ## 学习路径（按顺序读）
 
