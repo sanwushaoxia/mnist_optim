@@ -200,8 +200,18 @@ def hw_precision_matrix():
         [1, 3, 2, 3, 1],   # GPU
     ], dtype=float)
     im = ax.imshow(data, cmap="RdYlGn", vmin=0, vmax=3, aspect="auto", alpha=0.55)
-    notes = [["native & tuned\n0.59 ms", "no hw support\n(simulated): 22.1 ms", "no hw support\n(simulated): 22.4 ms", "VNNI native\n0.24 ms*", "no operators"],
-             ["CUDA cores only\n(fp32 skips TC)\n0.2-0.4 ms", "Tensor Core 2x\n0.12 ms*", "TC half speed\n0.16 ms", "TC via TRT\n0.1-0.2 ms", "GPU only\nsmall GEMM: ~20 ms"]]
+    # 统一格式：第 1 行 = 计算单元/指令集（不支持则 no hw support），
+    # 第 2 行 = 测试框架，第 3 行 = 耗时
+    notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.59 ms",
+              "no hw support\n(1DNN simulates fp32)\nPyTorch eager: 22.1 ms",
+              "no hw support\n(1DNN simulates fp32)\nPyTorch eager: 22.4 ms",
+              "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.24 ms*",
+              "no operators\nnot tested"],
+             ["CUDA cores (no TC)\nTensorRT\n0.2-0.4 ms",
+              "Tensor Core (TRT)\nTensorRT fp16\n0.12 ms*",
+              "Tensor Core (TRT)\nTensorRT bf16\n0.16 ms",
+              "Tensor Core (TRT)\nTensorRT int8 QDQ\n0.1-0.2 ms",
+              "Tensor Core (tinygemm)\ntorchao int4wo\n~20 ms"]]
     for i in range(2):
         for j in range(5):
             ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=9.5)
