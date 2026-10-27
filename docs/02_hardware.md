@@ -33,8 +33,9 @@
 
 | 术语 | 说明 |
 |---|---|
-| AVX2 / FMA | x86 向量指令（256 位宽），一条指令 8 个 fp32 运算，CPU 基线快路径 |
-| AVX_VNNI | int8 点积指令（`vpdpbusd`），一条指令 4 组 8-bit 乘加 |
+| AVX2 / FMA | x86 向量指令（256 位宽）：`vaddps`/`vmulps` 一条指令 8 个 fp32 加/乘，FMA（`vfmadd231ps`）一条指令 8 组乘加；也支持 int8/int32 的加减与按位运算。fp32 推理的乘加主体 |
+| AVX_VNNI | int8 点积专用指令（`vpdpbusd`），一条指令 4 组 × 8 对 int8 乘加进 int32 累加器；不支持 fp32 运算。与 AVX2 配合（乘加走 VNNI，requantize/搬移/裁剪走 AVX2）构成完整 int8 推理路径 |
+| AMX | Intel 服务器 CPU 矩阵引擎（Sapphire Rapids+），消费级桌面 CPU 没有。**AMX vs AVX512**：AVX512 是更宽的向量指令集（512 位，一条指令 16 个 fp32/32 个 int8，仍需自己组织循环）；AMX 是瓦片矩阵加速器（一条 `TDPBSSD` 指令完成整块矩阵乘，思路接近 Tensor Core）。两者消费级 Raptor Lake 都已砍掉 |
 | AMX | Intel 服务器 CPU 矩阵引擎（Sapphire Rapids+），消费级桌面 CPU 没有 |
 | oneDNN | Intel CPU 深度学习算子库（PyTorch CPU 后端）；无硬件支持时用 fp32 模拟 fp16/bf16 |
 | CUDA cores | NVIDIA 通用 FP32 单元；fp32 在这里跑（Tensor Core 不支持 fp32 矩阵乘） |
@@ -54,7 +55,7 @@ CPU 做神经网络计算，靠的是 **SIMD 向量指令**：一条指令同时
 
 - `AVX2`：256 位宽向量寄存器 → 一条指令做 8 个 fp32 加/乘；
 - `FMA`：乘加融合，一条指令完成 a×b+c；
-- `AVX_VNNI`：int8 点积专用，一条指令完成 4 组 8-bit 乘加（`vpdpbusd`）；
+- `AVX_VNNI`：int8 点积专用，一条指令完成 4 组 8-bit 乘加（`vpdpbusd`）——int8 乘加主体走 VNNI，requantize/裁剪/搬移等辅助运算仍走 AVX2，两者配合构成完整 int8 推理路径；
 - `AVX512-BF16` / `AMX`：bf16 向量运算 / 瓦片矩阵乘——**本机没有**。
 
 **为什么 bf16 在 CPU 上慢 40 倍**（22.4 vs 0.573 ms）：
