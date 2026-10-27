@@ -99,7 +99,7 @@ def dynamic_vs_static():
 
 # ---------- 3. 模型体积对比 ----------
 def size_bar():
-    models = ["fp32", "fp32\ncompile", "bf16 混合", "TRT\nfp16", "TRT\nbf16", "int8\n动态", "int8\n静态", "TRT\nint8", "torchao\nint4wo"]
+    models = ["fp32", "fp32\ncompile", "bf16 混合", "TRT\nfp16", "TRT\nbf16", "int8\n动态", "int8\n静态", "TRT\nint8", "torchao\nint4 w-only"]
     sizes = [12.74, 12.64, 6.47, 6.42, 6.47, 3.44, 3.20, 3.30, 2.24]
     colors = [C_BLUE, "#9CB3D5", C_ORANGE, "#E8B48A", "#E8B48A", C_GREEN, C_GREEN, "#8BC79A", C_PURPLE]
     fig, ax = plt.subplots(figsize=(10.5, 4.5))
@@ -203,15 +203,15 @@ def hw_precision_matrix():
     # 统一格式：第 1 行 = 计算单元/指令集（不支持则 no hw support），
     # 第 2 行 = 测试框架，第 3 行 = 耗时
     notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.59 ms",
-              "no hw support\n(1DNN simulates fp32)\nPyTorch eager: 22.1 ms",
-              "no hw support\n(1DNN simulates fp32)\nPyTorch eager: 22.4 ms",
+              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms",
+              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.4 ms",
               "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.24 ms*",
               "no operators\nnot tested"],
              ["CUDA cores (no TC)\nTensorRT\n0.2-0.4 ms",
               "Tensor Core (TRT)\nTensorRT fp16\n0.12 ms*",
               "Tensor Core (TRT)\nTensorRT bf16\n0.16 ms",
               "Tensor Core (TRT)\nTensorRT int8 QDQ\n0.1-0.2 ms",
-              "Tensor Core (tinygemm)\ntorchao int4wo\n~20 ms"]]
+              "Tensor Core (tinygemm)\ntorchao int4 w-only\n~20 ms"]]
     for i in range(2):
         for j in range(5):
             ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=9.5)
@@ -331,7 +331,7 @@ def resnet_chart():
         ax.text(xi, v + 0.04 if v < 0.1 else v + 0.05, f"{v:.2f}x", ha="center", fontsize=9.5)
     ax.set_xticks(x); ax.set_xticklabels(models)
     ax.set_ylabel("CPU P50 加速比（vs fp32）")
-    ax.set_title("普适性验证：int8 静态量化在两个模型上都加速（2.4x / 1.6x），bf16 都慢\n（GPU 上 weight-only 反超：int8wo 4.27x / int4wo 3.95x）")
+    ax.set_title("普适性验证：int8 静态量化在两个模型上都加速（2.4x / 1.6x），bf16 都慢\n（GPU 上 weight-only 反超：int8 w-only 4.27x / int4 w-only 3.95x）")
     ax.legend(); ax.grid(alpha=0.2, axis="y"); ax.set_axisbelow(True)
     save(fig, "resnet18_vs_cnn.png")
 
