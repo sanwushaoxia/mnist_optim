@@ -201,24 +201,25 @@ def hw_precision_matrix():
     ], dtype=float)
     im = ax.imshow(data, cmap="RdYlGn", vmin=0, vmax=3, aspect="auto", alpha=0.55)
     # 统一格式：第 1 行 = 计算单元/指令集（不支持则 no hw support），
-    # 第 2 行 = 测试框架，第 3 行 = 耗时
-    notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.590 ms",
-              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.4 ms",
-              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms",
-              "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.242 ms*",
-              "no operators\nnot tested"],
-             ["CUDA cores (no TC)\nTensorRT\n0.180 ms",
-              "Tensor Core (TRT)\nTensorRT bf16\n0.158 ms",
-              "Tensor Core (TRT)\nTensorRT fp16\n0.125 ms*",
-              "Tensor Core (TRT)\nTensorRT int8 QDQ\n0.085 ms*",
-              "Tensor Core (tinygemm)\ntorchao int4 w-only\n16.05 ms"]]
+    # 第 2 行 = 测试框架，第 3 行 = 耗时，第 4 行 = 该精度下模型体积
+    notes = [["AVX2 + FMA (oneDNN)\nPyTorch eager\n0.590 ms\n12.64 MB",
+              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.4 ms\n6.47 MB",
+              "no hw support\n(oneDNN simulates fp32)\nPyTorch eager: 22.1 ms\n—",
+              "AVX_VNNI (oneDNN)\nPyTorch int8 static\n0.242 ms*\n3.20 MB",
+              "no operators\nnot tested\n—"],
+             ["CUDA cores (no TC)\nTensorRT\n0.180 ms\n12.74 MB",
+              "Tensor Core (TRT)\nTensorRT bf16\n0.158 ms\n6.47 MB",
+              "Tensor Core (TRT)\nTensorRT fp16\n0.125 ms*\n6.42 MB",
+              "Tensor Core (TRT)\nTensorRT int8 QDQ\n0.085 ms*\n3.30 MB",
+              "Tensor Core (tinygemm)\ntorchao int4 w-only\n16.05 ms\n2.24 MB"]]
     for i in range(2):
         for j in range(5):
             ax.text(j, i, notes[i][j], ha="center", va="center", fontsize=9.5)
     ax.set_xticks(range(5)); ax.set_xticklabels(cols, fontsize=12)
     ax.set_yticks(range(2)); ax.set_yticklabels(rows, fontsize=10.5)
     ax.set_title("Hardware-Precision Fit Matrix:  green = fast, red = slow / unsupported\n"
-                 "* = best choice per hardware  (CPU -> int8 static,  GPU -> fp16 / int8)", fontsize=11.5)
+                 "* = best choice per hardware  (CPU -> int8 static,  GPU -> fp16 / int8)\n"
+                 "cell:  compute unit / instruction set  ->  framework  ->  latency (batch=1)  ->  model size", fontsize=11.5)
     save(fig, "hw_precision_matrix.png")
 
 
