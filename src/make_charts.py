@@ -70,7 +70,9 @@ def quantization_concept():
     ax = axes[0][1]
     xs = np.linspace(-4.5, 4.5, 500)
     ax.plot(xs, xs, "--", color="gray", lw=1, label="缩放后的原值（连续）")
-    ax.plot(xs, np.round(xs), color=C_BLUE, lw=2.5, label="round（取最近格）")
+    for lv in np.arange(-5, 6):  # 只画水平段：跳变处没有中间值，不画纵向连线
+        ax.hlines(lv, lv - 0.5, lv + 0.5, color=C_BLUE, lw=2.5)
+    ax.hlines([], [], [], color=C_BLUE, lw=2.5, label="round（取最近格）")
     for lv in np.arange(-4, 5):
         ax.axhline(lv, color=C_ORANGE, alpha=0.3, lw=0.8)
     samples = np.array([-3.6, -1.4, 0.3, 2.6])
@@ -96,7 +98,9 @@ def quantization_concept():
     for xx in (130, 150):
         ax.annotate("", xy=(xx, 125.2), xytext=(xx, 127.8),
                     arrowprops=dict(arrowstyle="->", color=C_RED, lw=1.2))
-    ax.text(30, 134, "越界的 130 和 150 塌缩成同一个 127，再也无法区分", fontsize=9, color=C_RED, ha="center")
+    ax.annotate("越界的 130 和 150 塌缩成\n同一个 127，再也无法区分",
+                xy=(128, 125.5), xytext=(-30, 58), ha="center", fontsize=9, color=C_RED,
+                arrowprops=dict(arrowstyle="->", color=C_RED, lw=1))
     ax.text(-152, 60, "越界区", fontsize=9, color=C_RED, va="center")
     ax.text(152, 60, "越界区", fontsize=9, color=C_RED, va="center", ha="right")
     ax.set_xlim(-155, 155); ax.set_ylim(-135, 140)
@@ -108,17 +112,21 @@ def quantization_concept():
     # (1,1) 四种格式的位域划分（保留原右图）
     ax = axes[1][1]
     dtypes = [("fp32\n(1+8+23)", 1, 8, 23, C_BLUE), ("fp16\n(1+5+10)", 1, 5, 10, C_GREEN),
-              ("bf16\n(1+8+7)", 1, 8, 7, C_ORANGE), ("int8\n(纯整数)", 0, 0, 8, C_RED)]
+              ("bf16\n(1+8+7)", 1, 8, 7, C_ORANGE), ("int8\n(纯整数)", 0, 0, 8, C_RED),
+              ("int4\n(纯整数)", 0, 0, 4, C_PURPLE)]
     for i, (name, sign, exp, man, color) in enumerate(dtypes):
         x0 = 0
+        is_int = name.startswith("int")
         for bits, lab, c in ((sign, "符号", color), (exp, "指数", color), (man, "尾数", color)):
             if bits:
+                label = (f"整数 {bits}bit" if bits >= 8 else f"{bits}bit") if is_int \
+                    else (f"{lab} {bits}bit" if bits >= 5 else f"{bits}")
                 ax.barh(i, bits, left=x0, height=0.55, color=c, alpha=0.35 + 0.2 * (lab != "符号"), edgecolor="white")
-                ax.text(x0 + bits / 2, i, f"{lab} {bits}bit" if bits >= 5 else f"{bits}", ha="center", va="center", fontsize=8)
+                ax.text(x0 + bits / 2, i, label, ha="center", va="center", fontsize=8)
             x0 += bits
-    ax.set_yticks(range(4)); ax.set_yticklabels([d[0] for d in dtypes])
+    ax.set_yticks(range(len(dtypes))); ax.set_yticklabels([d[0] for d in dtypes])
     ax.set_xlim(0, 34); ax.set_xlabel("位宽（bit）")
-    ax.set_title("四种格式的位域：指数保范围，尾数定精度")
+    ax.set_title("④ 四种格式的位域：指数保范围，尾数定精度")
     ax.grid(alpha=0.2, axis="x")
     fig.tight_layout(h_pad=3.0, w_pad=3.0)
     save(fig, "quantization_concept.png")
@@ -126,29 +134,50 @@ def quantization_concept():
 
 # ---------- 2. 动态 vs 静态量化工作流 ----------
 def dynamic_vs_static():
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
-    for ax, title, steps, colors in (
-        (axes[0], "动态量化（无需校准数据）",
-         ["fp32 模型", "权重→int8\n（离线一次）", "推理时：\n激活 fp32\n→ 动态量化", "int8 GEMM\n→ 反量化"],
-         [C_BLUE, C_ORANGE, C_GREEN, C_RED]),
-        (axes[1], "静态量化（需校准数据）",
-         ["fp32 模型", "校准：喂 N 张图\n统计每层激活范围", "权重+激活 scale\n→ 全部写死 int8", "推理时：\n全程 int8"],
-         [C_BLUE, C_PURPLE, C_ORANGE, C_GREEN]),
-    ):
+    from matplotlib.patches import FancyBboxPatch
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 6.4))
+    fig.tight_layout(w_pad=4.0)
+    specs = [
+        ("动态量化", "无需校准数据",
+         "仅权重 → int8\n（s_w = max|W|/127 写死；激活的 scale 此步不定）",
+         "激活 fp32 进 → 现场统计范围 s_x\n→ int8 GEMM → 反量化回 fp32 出",
+         "优点：零校准数据，s_x 实时贴合输入\n缺点：激活仍是 fp32，层间传输没省\n只支持 Linear（Conv 支持弱），收益小",
+         2),
+        ("静态量化", "需校准数据",
+         "校准：喂 N 张无标签图，统计每层激活范围\n权重 + 激活的 scale 都写死（激活部分是关键差异）",
+         "激活 int8 进 → int8 GEMM → requantize\n→ int8 出（全程整数，不经浮点）",
+         "优点：全程 int8，最快最小；Conv 也量化\n缺点：校准分布必须与真实输入一致\n（错配会掉精度，见 01 · 第 6 节）",
+         1),
+    ]
+    for ax, (name, sub, off_text, infer_text, note, hi) in zip(axes, specs):
         ax.set_xlim(0, 10); ax.set_ylim(0, 10); ax.axis("off")
-        ax.set_title(title, fontsize=13, pad=10)
-        bw, bh = 4.2, 1.6
-        positions = [(0.6, 8), (5.2, 8), (0.6, 4.6), (5.2, 4.6)]
-        for (px, py), text, c in zip(positions, steps, colors):
-            ax.add_patch(plt.Rectangle((px, py - bh / 2), bw, bh, facecolor=c, alpha=0.18, edgecolor=c, lw=2))
-            ax.text(px + bw / 2, py, text, ha="center", va="center", fontsize=9.5)
-        arrows = [((2.8, 8), (5.2, 8)), ((7.3, 8), (7.3, 4.6 + bh / 2 + 0.15)), ((5.2, 4.6), (2.8, 4.6))]
-        for (x1, y1), (x2, y2) in arrows:
-            ax.annotate("", xy=(x2, y2), xytext=(x1, y1), arrowprops=dict(arrowstyle="->", color="gray", lw=1.6))
-        note = "优点：简单/精度稳\n缺点：激活仍是 fp32\nConv 支持弱，体积/速度收益小" if title.startswith("动态") else \
-               "优点：全程 int8，最快最小\n缺点：需代表性校准集\n（校不准会掉精度）"
-        ax.text(5, 1.6, note, ha="center", va="center", fontsize=10, color="#333",
-                bbox=dict(boxstyle="round", facecolor="#f5f5f5", edgecolor="#ccc"))
+        ax.set_title(f"{name}（{sub}）", fontsize=13, pad=10)
+        bw, x0 = 7.0, 2.5
+        rows = [("模型", 8.9, 1.0, "fp32 模型", C_BLUE),
+                ("离线\n（一次性）", 6.2, 1.8, off_text, C_ORANGE),
+                ("推理\n（每次前向）", 3.2, 1.9, infer_text, C_GREEN)]
+        for label, y, h, text, c in rows:
+            ax.text(0.2, y, label, fontsize=10, color="dimgray", fontweight="bold",
+                    ha="left", va="center")
+            w = 3.4 if label == "模型" else bw
+            bx = 5.5 - w / 2
+            ax.add_patch(FancyBboxPatch((bx, y - h / 2), w, h, boxstyle="round,pad=0.08",
+                                        facecolor=c, alpha=0.16, edgecolor=c, lw=1.8))
+            ax.text(bx + w / 2, y, text, ha="center", va="center", fontsize=9.8)
+        for y1, y2 in ((8.4, 7.15), (5.25, 4.2)):
+            ax.annotate("", xy=(5.5, y2), xytext=(5.5, y1),
+                        arrowprops=dict(arrowstyle="->", color="gray", lw=1.8))
+        if hi is not None:  # 高亮「激活 scale 在哪一步确定」——两者本质区别
+            label, y, h, text, c = rows[hi]
+            ax.add_patch(FancyBboxPatch((5.5 - bw / 2 - 0.28, y - h / 2 - 0.28), bw + 0.56, h + 0.56,
+                                        boxstyle="round,pad=0.08", fill=False,
+                                        edgecolor=C_RED, ls="--", lw=1.7))
+            ax.text(5.5, y + h / 2 + 0.66, "★ 激活 scale 在这一步确定",
+                    ha="center", fontsize=10, color=C_RED, fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor=C_RED, lw=1))
+        ax.text(5.0, 1.05, note, ha="center", va="center", fontsize=9.5, color="#333",
+                linespacing=1.5,
+                bbox=dict(boxstyle="round", facecolor="#f7f7f7", edgecolor="#ccc"))
     save(fig, "dynamic_vs_static.png")
 
 
