@@ -1,7 +1,7 @@
 """生成全部对比图表到 assets/（供 docs/ 教程引用）。
 
 图表清单：
-1. quantization_concept.png  — 量化原理示意（fp32→int8 的 scale/zero-point 映射）
+1. quantization_concept.png  — 量化三步示意（除 scale → 四舍五入 → clip）+ 精度格式位域对比
 2. dynamic_vs_static.png     — 动态 vs 静态量化工作流对比
 3. size_bar.png              — 模型体积对比（条形）
 4. speed_cpu_bar.png         — CPU 延迟 P50 对比（条形，log 刻度）
@@ -34,25 +34,79 @@ def save(fig, name):
 
 # ---------- 1. 量化原理示意 ----------
 def quantization_concept():
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+    fig, axes = plt.subplots(2, 2, figsize=(13, 8.5))
 
-    ax = axes[0]
-    x = np.linspace(-1.2, 1.2, 400)
-    y = np.clip(x, -1, 1)
-    ax.plot(x, x, "--", color="gray", lw=1, label="原始 fp32 值")
-    ax.plot(x, y, color=C_BLUE, lw=2.5, label="int8 量化后（clamp + 离散化）")
-    levels = np.linspace(-1, 1, 9)
-    for lv in levels:
-        ax.axhline(lv, color=C_ORANGE, alpha=0.25, lw=0.8)
-        ax.axvline(lv, color=C_ORANGE, alpha=0.25, lw=0.8)
-    sample = np.array([-1.0, -0.6, -0.2, 0.1, 0.5, 1.0])
-    q = np.round(sample * 4) / 4
-    ax.scatter(sample, q, color=C_RED, zorder=5, s=45, label="离散网格点（256 级）")
-    ax.set_title("量化：连续 fp32 → 离散 int8")
-    ax.set_xlabel("fp32 数值"); ax.set_ylabel("int8 映射值")
-    ax.legend(fontsize=9); ax.grid(alpha=0.2)
+    # (0,0) 第①步：除以 scale —— fp32 小范围拉伸到 [-127, 127] 的整数格
+    ax = axes[0][0]
+    s = 1.4 / 127
+    ax.set_xlim(-135, 135); ax.set_ylim(-0.7, 3.1)
+    ax.axhline(0.5, color="black", lw=2)                               # 缩放后数轴
+    for t in range(-130, 131):                                         # 整数格
+        ax.plot([t, t], [0.44, 0.56], color=C_ORANGE, lw=0.8, alpha=0.5)
+    for t in (-127, -64, 0, 64, 127):
+        ax.text(t, 0.14, str(t), ha="center", fontsize=9)
+    fp = np.array([-1.4, -0.5, 0.37, 1.0])
+    q = fp / s
+    fv = fp * 25                                                       # fp32 轴视觉放大（示意，未按比例）
+    ax.plot([fv.min() - 8, fv.max() + 8], [2.0, 2.0], color="gray", lw=2)
+    for f, qq in zip(fv, q):
+        ax.annotate("", xy=(qq, 0.64), xytext=(f, 1.88),
+                    arrowprops=dict(arrowstyle="->", color=C_BLUE, lw=1.2, alpha=0.7))
+    ax.scatter(fv, [2.0] * 4, color=C_RED, s=50, zorder=5)
+    ax.scatter(q, [0.5] * 4, color=C_BLUE, s=50, zorder=5)
+    for f, lab in zip(fv, ["-1.4", "-0.5", "0.37", "1.0"]):
+        ax.text(f, 2.2, lab, ha="center", fontsize=9, color=C_RED)
+    for qq, lab in zip(q, ["-127", "-45.4", "33.6", "90.7"]):
+        ax.text(qq, 0.74, lab, ha="center", fontsize=8, color=C_BLUE)
+    ax.text(-128, 2.6, "÷ s", fontsize=14, color=C_PURPLE)
+    ax.text(0, 2.9, "s = 范围/127 = 1.4/127 ≈ 0.011（fp32 里一个格子的宽度；fp32 轴未按比例）",
+            ha="center", fontsize=9, color="dimgray")
+    ax.text(-133, 2.0, "fp32 原值\n（连续）", fontsize=9, color="gray", va="center")
+    ax.set_yticks([]); ax.set_xlabel("÷s 后的值（格）")
+    ax.set_title("① 除以 scale：fp32 的连续范围 → 255 个整数格")
+    ax.spines[["top", "right", "left"]].set_visible(False)
 
-    ax = axes[1]
+    # (0,1) 第②步：四舍五入 —— 误差 ≤ ±s/2
+    ax = axes[0][1]
+    xs = np.linspace(-4.5, 4.5, 500)
+    ax.plot(xs, xs, "--", color="gray", lw=1, label="缩放后的原值（连续）")
+    ax.plot(xs, np.round(xs), color=C_BLUE, lw=2.5, label="round（取最近格）")
+    for lv in np.arange(-4, 5):
+        ax.axhline(lv, color=C_ORANGE, alpha=0.3, lw=0.8)
+    samples = np.array([-3.6, -1.4, 0.3, 2.6])
+    ax.scatter(samples, np.round(samples), color=C_RED, s=50, zorder=5, label="取整后落在格上")
+    ax.annotate("", xy=(0.3, 0), xytext=(0.3, 0.3),
+                arrowprops=dict(arrowstyle="<->", color=C_RED, lw=1.5))
+    ax.text(-0.4, 0.15, "≤ s/2", fontsize=10, color=C_RED, ha="right")
+    ax.set_xlim(-4.8, 4.8); ax.set_ylim(-4.8, 4.8)
+    ax.set_xlabel("缩放后的值（格）\n（每次取整最多拖回 0.5 格 → 误差 ≤ ±s/2）", fontsize=10)
+    ax.set_ylabel("取整后的值（格）")
+    ax.set_title("② 四舍五入：只在半格内丢精度")
+    ax.legend(fontsize=8, loc="upper left"); ax.grid(alpha=0.2)
+
+    # (1,0) 第③步：clip —— 越界值全部塌缩到边界
+    ax = axes[1][0]
+    xs = np.linspace(-155, 155, 500)
+    ax.plot(xs, np.clip(xs, -127, 127), color=C_BLUE, lw=2.5, label="clip 到 [-127, 127]")
+    for side in (-1, 1):
+        ax.axvspan(side * 127, side * 155, color=C_RED, alpha=0.12)
+    ax.axhline(127, color=C_ORANGE, lw=1, ls=":"); ax.axhline(-127, color=C_ORANGE, lw=1, ls=":")
+    ax.scatter([100], [100], color=C_GREEN, s=50, zorder=5, label="界内：正常保留")
+    ax.scatter([130, 150], [127, 127], color=C_RED, s=50, zorder=5, label="越界：塌缩到边界")
+    for xx in (130, 150):
+        ax.annotate("", xy=(xx, 125.2), xytext=(xx, 127.8),
+                    arrowprops=dict(arrowstyle="->", color=C_RED, lw=1.2))
+    ax.text(30, 134, "越界的 130 和 150 塌缩成同一个 127，再也无法区分", fontsize=9, color=C_RED, ha="center")
+    ax.text(-152, 60, "越界区", fontsize=9, color=C_RED, va="center")
+    ax.text(152, 60, "越界区", fontsize=9, color=C_RED, va="center", ha="right")
+    ax.set_xlim(-155, 155); ax.set_ylim(-135, 140)
+    ax.set_xticks([-127, -64, 0, 64, 127])
+    ax.set_xlabel("缩放后的值（格）"); ax.set_ylabel("最终量化值 q")
+    ax.set_title("③ clip：超范围的值强制压到边界（不可恢复）")
+    ax.legend(fontsize=8, loc="upper left"); ax.grid(alpha=0.2)
+
+    # (1,1) 四种格式的位域划分（保留原右图）
+    ax = axes[1][1]
     dtypes = [("fp32\n(1+8+23)", 1, 8, 23, C_BLUE), ("fp16\n(1+5+10)", 1, 5, 10, C_GREEN),
               ("bf16\n(1+8+7)", 1, 8, 7, C_ORANGE), ("int8\n(纯整数)", 0, 0, 8, C_RED)]
     for i, (name, sign, exp, man, color) in enumerate(dtypes):
@@ -64,8 +118,9 @@ def quantization_concept():
             x0 += bits
     ax.set_yticks(range(4)); ax.set_yticklabels([d[0] for d in dtypes])
     ax.set_xlim(0, 34); ax.set_xlabel("位宽（bit）")
-    ax.set_title("精度格式对比：bf16 指数位 = fp32（不易溢出），尾数位少（精度低）")
+    ax.set_title("四种格式的位域：指数保范围，尾数定精度")
     ax.grid(alpha=0.2, axis="x")
+    fig.tight_layout(h_pad=3.0, w_pad=3.0)
     save(fig, "quantization_concept.png")
 
 
