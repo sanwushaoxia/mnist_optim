@@ -40,16 +40,7 @@
 
 ### 场景推荐
 
-| 场景 | 最优选择 | 实测 |
-|---|---|---|
-| **CPU 部署** | int8 静态量化 | 0.242 ms（fp32 的 2.4 倍速），3.2 MB |
-| **GPU 部署** | TensorRT fp16 | 0.12 ms / 32 万条/秒（eager 的 90 倍），精度无损 |
-| **CPU 快速集成** | int8 动态量化 | 无需校准数据，精度最稳 |
-| **大模型训练** | bf16 混合精度 | 指数位与 fp32 相同，不易溢出（CPU 上无硬件支持，勿用） |
-| **静态量化掉精度** | QAT | 本实验恢复 6.5% 且反超基线，成本极低 |
-| **大模型显存敏感** | torchao weight-only | ResNet-18 上 GPU 反超 4.27× |
-
-> 以上每条结论的「为什么」：精度格式与硬件的匹配见 [02 · 硬件-精度匹配矩阵](./02_hardware.md)；执行方式与引擎差距见 [02 · GPU 上发生了什么](./02_hardware.md)；校准与 QAT 见 [01 · 第 6/7 节](./01_quantization_basics.md)。
+与 [01 · 快速选择指南](./01_quantization_basics.md#9-快速选择指南)同表（此处不重复维护，以 01 为准）。每条结论的「为什么」：精度格式与硬件的匹配见 [02 · 硬件-精度匹配矩阵](./02_hardware.md#4-硬件-精度匹配矩阵把前面的现象收进一张地图)；执行方式与引擎差距见 [02 · GPU 上发生了什么](./02_hardware.md#3-gpu-上发生了什么)；校准与 QAT 见 [01 · 第 6/7 节](./01_quantization_basics.md)。
 
 ## 2. 分实验数据
 
@@ -86,9 +77,7 @@ CPU 综合基准（延迟 200 次取分位数，i5-13490F）：
 
 ### 2.2 TensorRT 部署对比（fp32 / fp16 / bf16 / int8 引擎）
 
-通过 ONNX 导出 + TensorRT 11 构建引擎。环境：TensorRT 11.4、RTX 3060（12GB，驱动 580.178）。
-
-**构建方式（适配 TRT 11）**：TRT 11 移除了弱类型 API（`BuilderFlag.INT8`、`IInt8Calibrator` 校准器），int8 改用官方推荐的**显式量化路径**——在 ONNX 中插入 QDQ（QuantizeLinear/DequantizeLinear）节点 + `STRONGLY_TYPED` 强类型网络构建。激活 scale 用训练集 8192 张图做 max-abs 校准（per-tensor），权重 per-channel。fp16/fp32 为导出时 cast 权重 dtype。
+通过 ONNX 导出 + TensorRT 11 构建引擎。环境：TensorRT 11.4、RTX 3060（12GB，驱动 580.178）。构建方式：int8 用 QDQ 显式量化（8192 张图 max-abs 校准）、fp16/bf16 直接 cast，适配 TRT 11 的完整细节与踩坑见 [§3 踩坑清单 B](#3-踩坑清单汇总)。
 
 **结果（多轮测量，取代表值）**：
 
@@ -108,7 +97,7 @@ CPU 综合基准（延迟 200 次取分位数，i5-13490F）：
 | PyTorch eager | 1.8k 条/秒 | 3.8k 条/秒 | 不支持 |
 | TensorRT | 104k+ 条/秒 | 292k+ 条/秒 | 237k+ 条/秒 |
 
-**结论**：TRT 相对 eager 快 **30-100 倍**——根源是执行方式（无 Python 分发 + 算子融合 + kernel 自动调优），不是精度；原理展开见 [02 · GPU 上发生了什么](./02_hardware.md)。fp16 吞吐约为 bf16 的 2 倍，是消费卡 Tensor Core 的电路配比差异（见 [02 · 同上节](./02_hardware.md)）。部署推荐次序：TRT fp16（无脑选）→ TRT int8（体积敏感时）；bf16 保留给大模型训练。bf16 引擎需 opset 20 导出 ONNX（TRT 强类型网络可保留 BF16 dtype）。
+**结论**：TRT 相对 eager 快 **30-100 倍**——根源是执行方式（无 Python 分发 + 算子融合 + kernel 自动调优），不是精度；原理展开见 [02 · GPU 上发生了什么](./02_hardware.md#3-gpu-上发生了什么)。fp16 吞吐约为 bf16 的 2 倍，是消费卡 Tensor Core 的电路配比差异（见 [02 · GPU 上发生了什么](./02_hardware.md#3-gpu-上发生了什么)）。部署推荐次序：TRT fp16（无脑选）→ TRT int8（体积敏感时）；bf16 保留给大模型训练。bf16 引擎需 opset 20 导出 ONNX（TRT 强类型网络可保留 BF16 dtype）。
 
 ### 2.3 torchao weight-only 量化（GPU）
 
@@ -126,11 +115,11 @@ torchao 0.13 的 weight-only 混合精度（权重 int8/int4、激活 bf16，tin
 
 | Provider | 延迟 P50 | 吞吐/秒 | 准确率 |
 |---|---|---|---|
-| CPU | 0.82-0.88 ms | 4.4-4.5k | 99.04%* |
-| CUDA | 0.229 ms | 29-52k | 99.04%* |
+| CPU | 0.82-0.88 ms | 4.4-4.5k | 99.04% |
+| CUDA | 0.229 ms | 29-52k | 99.04% |
 | TensorRT-EP | 不支持（回退 CPU） | - | - |
 
-\* 此表准确率列显示 0.9792 是 QDQ 版 ONNX 的数值（build_trt.py 最后一次导出覆盖了 model.onnx），fp32 原版为 99.04%。
+本表测的是 fp32 原版 ONNX 模型（非 QDQ 量化版），准确率与 fp32 基线一致。
 
 **结论**：ORT CUDA EP 吞吐约 3-5 万条/秒——比 PyTorch eager 快约 10 倍，但只有原生 TRT 的 1/4-1/8（TRT 的 kernel 调优和融合更深）。
 
@@ -156,7 +145,7 @@ torchao 0.13 的 weight-only 混合精度（权重 int8/int4、激活 bf16，tin
 | int8 动态 | 92.66% | **-0.02%** |
 | int8 静态 | 87.45% | **⚠️ -5.23%** |
 
-**结论**：bf16 和 int8 动态量化的无损结论是**普遍规律**（跨任务成立）。int8 静态的 -5.23% 最初归因于"校准数据量不足"，后被 2.7 校准研究推翻——**真正根因是校准数据分布不匹配**（用 MNIST 数据校准 Fashion-MNIST 模型，归一化参数 0.1307 vs 0.2860），换用同数据集校准后损失只有 -0.2%。事故机制与教训见 [01 · 真实教训](./01_quantization_basics.md)。
+**结论**：bf16 和 int8 动态量化的无损结论是**普遍规律**（跨任务成立）。int8 静态的 -5.23% 最初归因于"校准数据量不足"，后被 2.7 校准研究推翻——**真正根因是校准数据分布不匹配**（用 MNIST 数据校准 Fashion-MNIST 模型，归一化参数 0.1307 vs 0.2860），换用同数据集校准后损失只有 -0.2%。事故机制与教训见 [01 · 真实教训](./01_quantization_basics.md#6-真实教训校准数据的分布必须与真实输入一致)。
 
 ### 2.7 校准研究：数据量 × 方法扫描
 
@@ -202,7 +191,7 @@ RTX 3060，MNIST，5 epoch，Adam lr=1e-3：
 | bf16 autocast | 21.7s（**1.4×**） | 98.92% |
 | fp16 + GradScaler | 18.7s（**1.7×**） | 99.02% |
 
-**结论**：低精度训练不伤精度（三者无损，fp16 略高属波动范围）；bf16 提速 1.4×、fp16 提速 1.7×。bf16 不需要 GradScaler（指数位与 fp32 相同），fp16 必须配 GradScaler（梯度下溢防护）——溢出行为差异的根源见 [01 · 第 1 节](./01_quantization_basics.md)。训练选 fp16+scaler 追求速度，选 bf16 求稳。
+**结论**：低精度训练不伤精度（三者无损，fp16 略高属波动范围）；bf16 提速 1.4×、fp16 提速 1.7×。bf16 不需要 GradScaler（指数位与 fp32 相同），fp16 必须配 GradScaler（梯度下溢防护）——溢出行为差异的根源见 [01 · 第 1 节](./01_quantization_basics.md#1-什么是量化)。训练选 fp16+scaler 追求速度，选 bf16 求稳。
 
 ### 2.10 ResNet-18 普适性验证（330 万 vs 1100 万参数）
 
@@ -292,6 +281,18 @@ TRT fp16：~227k-356k 条/秒（eager 的 90 倍），精度无损；体积敏�
 <summary>3. Fashion-MNIST 上静态量化掉到 87.45% 后，QAT 恢复到了多少？</summary>
 
 93.95%——比 fp32 基线 92.68% 还高 1.27%（fake-quant 的噪声正则化效应），微调成本仅 3 epoch / 29 秒（见 §2.8）。
+</details>
+
+<details>
+<summary>4. 性能数据应该报平均值还是分位数？为什么？</summary>
+
+分位数（P50/P95/P99）。平均值会掩盖长尾：bf16 在 CPU 上的 P99（85 ms）是 P50（20.9 ms）的 4 倍（P/E 核调度 + 仿真路径抖动），在线服务看平均值会低估 1% 慢请求的影响。离线批处理才主要看吞吐（见 [03 · 为什么要看分位数](./03_reading_benchmarks.md#2-为什么要看分位数p50p95p99)）。
+</details>
+
+<details>
+<summary>5. TensorRT 比 PyTorch eager 快 30-100 倍的根源是什么？</summary>
+
+执行方式，不是精度：无 Python 逐算子分发（eager 的分发开销在小模型上占比 >80%）、Conv+BN+ReLU 算子融合、kernel 对本机 GPU 自动调优。原理展开见 [02 · GPU 上发生了什么](./02_hardware.md#3-gpu-上发生了什么)。
 </details>
 
 ---

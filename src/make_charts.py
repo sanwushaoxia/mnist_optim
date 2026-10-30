@@ -251,24 +251,31 @@ def speed_gpu_bar():
 
 # ---------- 6. 体积 vs 准确率权衡 ----------
 def tradeoff_scatter():
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    # (体积MB, MNIST准确率, 名称, 颜色, 标注偏移)
+    fig, ax = plt.subplots(figsize=(11, 6))
+    # (体积MB, MNIST准确率, 名称, 颜色, 标注偏移)。fp32 与 fp32+compile 权重相同
+    # （compile 只编译计算图），体积/精度完全一致，故共用一点；其优势在速度维度，不在本图两轴。
     pts = [
-        (12.64, 99.04, "fp32", C_BLUE, (8, 6)),
-        (12.64, 99.04, "fp32+compile", "#9CB3D5", (8, -14)),
-        (6.47, 99.04, "bf16 混合", C_ORANGE, (8, 6)),
-        (3.44, 99.05, "int8 动态", C_GREEN, (8, 6)),
-        (3.20, 98.98, "int8 静态", "#8BC79A", (8, -14)),
-        (2.24, 99.04, "int4 weight-only", C_PURPLE, (10, -16)),
+        (12.64, 99.04, "fp32 与 fp32+compile（权重相同，仅推理速度不同：compile 快 15-40%）", C_BLUE, (12, -14)),
+        (6.47, 99.04, "bf16 混合", C_ORANGE, (12, 8)),
+        (6.42, 99.04, "TRT fp16 引擎", "#E8B48A", (12, -16)),
+        (3.44, 99.05, "int8 动态", C_GREEN, (12, 8)),
+        (3.20, 98.98, "int8 静态", "#8BC79A", (12, -14)),
+        (2.24, 99.04, "int4 weight-only", C_PURPLE, (12, -14)),
     ]
     for size, acc, name, c, offset in pts:
-        ax.scatter(size, acc, s=140, color=c, edgecolor="white", zorder=5)
-        ax.annotate(name, (size, acc), textcoords="offset points", xytext=offset, fontsize=10,
-                    ha="left" if offset[0] > 0 else "right")
-    ax.set_xlabel("模型大小（MB）"); ax.set_ylabel("MNIST 测试准确率（%）")
-    ax.set_ylim(98.85, 99.25)
-    ax.set_title("体积 vs 精度权衡：量化到 int4 仍保持 99%+（MNIST 任务简单）\n更难任务上静态量化会掉精度，见 Fashion-MNIST 验证")
+        ax.scatter(size, acc, s=150, color=c, edgecolor="white", zorder=5, linewidth=1.2)
+        # 名称 + 坐标一起标注，避免重叠
+        ax.annotate(f"{name}\n({size:.2f} MB, {acc:.2f}%)", (size, acc),
+                    textcoords="offset points", xytext=offset, fontsize=9.5,
+                    ha="left", va="center" if abs(offset[1]) < 10 else "top" if offset[1] < 0 else "bottom",
+                    linespacing=1.4)
+    ax.set_xlabel("模型大小（MB）", fontsize=11)
+    ax.set_ylabel("MNIST 测试准确率（%）", fontsize=11)
+    ax.set_ylim(98.90, 99.18)
+    ax.set_xlim(1.2, 14.5)
+    ax.set_title("体积 vs 精度权衡：量化到 int4 仍保持 99%+（MNIST 任务简单）\n更难任务上静态量化会掉精度，见 Fashion-MNIST 验证", fontsize=12.5)
     ax.grid(alpha=0.3); ax.set_axisbelow(True)
+    fig.tight_layout()
     save(fig, "tradeoff_scatter.png")
 
 
