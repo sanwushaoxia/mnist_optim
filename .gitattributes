@@ -1,0 +1,17 @@
+# 统一行尾：所有文本文件在仓库与检出时均为 LF，
+# 避免 Windows core.autocrlf 造成 "LF will be replaced by CRLF" 反复转换警告
+* text=auto eol=lf
+
+# Windows 批处理脚本必须保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做任何行尾转换
+*.png binary
+*.jpg binary
+*.pth binary
+*.onnx binary
+*.engine binary
+*.plan binary
+*.npz binary
+*.csv binary

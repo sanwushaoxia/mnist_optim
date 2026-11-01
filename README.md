@@ -20,22 +20,24 @@
 | tinygemm | torchao 的 int8/int4 weight-only GPU kernel，按组反量化权重 |
 | PyTorch eager | PyTorch 默认逐算子执行（无编译/融合） |
 
-完整说明见 [docs/02 · 硬件架构](docs/02_hardware.md)。
+完整说明见 [docs/03 · 硬件架构](docs/03_hardware.md)。
 </details>
 
 ## 学习路径（按顺序读，层层深入）
 
-> 建议按 00 → 01 → 02 → 03 → 04 顺序读：00 是术语速查表（不认识的专业词随时回来查）；01 讲「量化是什么」，02 回答「为什么在不同硬件上快慢不同」，03 教「数字怎么测才可信」，04 是全部数据与踩坑的手册（可随时跳查）。每篇开头都标注了学习目标和前置知识，深水区内容集中放在各篇文末的「进一步学习」一节，初学可跳过；每篇文末有自测题检验理解。
+> 建议按 00 → 01 → 02 → 03 → 04 →（05 按需跳查）→ 06 顺序读：00 是术语速查表（不认识的专业词随时回来查）；01 讲「量化是什么」，02 讲「浮点路线、校准风险与怎么选」，03 回答「为什么在不同硬件上快慢不同」，04 教「数字怎么测才可信」，05 是量化深水区（按需跳查），06 是全部数据与踩坑的手册（可随时跳查）。每篇开头都标注了学习目标和前置知识；深水区内容集中在 [05 · 深水区手册](docs/05_quantization_deep_dives.md)，初学可跳过；每篇文末有自测题检验理解。
 
 | # | 文档 | 内容 | 适合 |
 |---|---|---|---|
 | 0 | [术语速查表](docs/00_glossary.md) | 全部专业词的一句话白话解释（浮点数/激活/kernel/P50…） | 随时查阅 |
-| 1 | [量化入门](docs/01_quantization_basics.md) | 量化是什么、PTQ/QAT 两条路线、动态 vs 静态、混合精度、校准教训与 QAT 解法 | 所有人，从这里开始 |
-| 2 | [硬件架构](docs/02_hardware.md) | CPU/GPU 怎么算神经网络、指令集、bf16 快慢差 40 倍的根源、TRT 快 30-100 倍的原因、部署前检查清单 | 第 1 篇后 |
-| 3 | [如何读懂性能数据](docs/03_reading_benchmarks.md) | 延迟/吞吐/分位数、正确计时方法、本项目踩过的 4 个 bug、对比公平性 | 想自己做基准测试的人 |
-| 4 | [完整实验结果](docs/04_results.md) | 核心结论速查 + 分实验数据表 + 踩坑清单汇总 + 复现命令 | 随时查阅（手册） |
+| 1 | [量化入门](docs/01_quantization_basics.md) | 量化是什么、PTQ/QAT 两条路线、动态 vs 静态、会不会掉精度 | 所有人，从这里开始 |
+| 2 | [量化进阶](docs/02_quantization_advanced.md) | 浮点量化（fp16/bf16）、激活处理三态全景（不量化/动态/静态）、校准分布教训与 QAT 解法、场景与架构选择指南 | 读完 01 |
+| 3 | [硬件架构](docs/03_hardware.md) | CPU/GPU 怎么算神经网络、指令集、bf16 快慢差 40 倍的根源、TRT 快 30-100 倍的原因、部署前检查清单 | 第 1/2 篇后 |
+| 4 | [如何读懂性能数据](docs/04_reading_benchmarks.md) | 延迟/吞吐/分位数、正确计时方法、本项目踩过的 4 个 bug、对比公平性 | 想自己做基准测试的人 |
+| 5 | [量化深水区](docs/05_quantization_deep_dives.md) | 01/02/03 主线留下的十四个深挖问题（误差推导、requantize、255 级、per-group、scale 最优选择、乘加精度行为、tf32、AMX vs AVX512…） | 按需跳查（手册） |
+| 6 | [完整实验结果](docs/06_results.md) | 核心结论速查 + 分实验数据表 + 踩坑清单汇总 + 复现命令 | 随时查阅（手册） |
 
-图表都在 [assets/](assets/)（12 张，由 `src/make_charts.py` 生成）。核心实验还包括：校准研究（分布匹配 > 数据量）、QAT vs PTQ（QAT 反超基线 1.3%）、训练侧 bf16/fp16 对比、ResNet-18 普适性验证（weight-only 在大模型反超 4.27x）——数据与结论见 [docs/04](docs/04_results.md)。
+图表都在 [assets/](assets/)（12 张，由 `src/make_charts.py` 生成）。核心实验还包括：校准研究（分布匹配 > 数据量）、QAT vs PTQ（QAT 反超基线 1.3%）、训练侧 bf16/fp16 对比、ResNet-18 普适性验证（weight-only 在大模型反超 4.27x）——数据与结论见 [docs/06](docs/06_results.md)。
 
 ## 一图看结论
 
@@ -52,10 +54,13 @@
 mnist_optim/
 ├── README.md
 ├── docs/                  # 教程文档（按上面学习路径读）
+│   ├── 00_glossary.md
 │   ├── 01_quantization_basics.md
-│   ├── 02_hardware.md
-│   ├── 03_reading_benchmarks.md
-│   └── 04_results.md
+│   ├── 02_quantization_advanced.md
+│   ├── 03_hardware.md
+│   ├── 04_reading_benchmarks.md
+│   ├── 05_quantization_deep_dives.md
+│   └── 06_results.md
 ├── assets/                # 图表（8 张，教学用）
 ├── src/                   # 全部脚本（见下表）
 ├── models/                # 训练/量化产物（fp32/bf16/int8/引擎文件）
@@ -109,11 +114,11 @@ conda run -n py312 python src/export.py --list    # 13. 查看全部产物
 conda run -n py312 python src/serve.py --selftest # 14. 服务冒烟测试
 ```
 
-完整复现命令见 [docs/04_results.md](docs/04_results.md)。
+完整复现命令见 [docs/06_results.md](docs/06_results.md)。
 
 ## 核心发现速览
 
-1. **CPU 选 int8 静态、GPU 选 TRT fp16**——精度格式的速度由硬件是否有原生执行单元决定（[02 · 硬件架构](docs/02_hardware.md)）；
+1. **CPU 选 int8 静态、GPU 选 TRT fp16**——精度格式的速度由硬件是否有原生执行单元决定（[03 · 硬件架构](docs/03_hardware.md)）；
 2. **校准数据的分布匹配 > 数据量 > 方法**：同分布校准 256 张就够（掉 0.2%），跨分布校准掉 5.3% 且无法用数据量弥补；QAT 微调 3 epoch 反超 fp32 基线 1.3%；
 3. **TensorRT 快 30-100 倍的根源是执行方式**（无 Python 分发 + 算子融合 + kernel 调优），不是精度；
 4. **bf16 是"训练格式"**：消费级 GPU 推理选 fp16（bf16 只有 fp16 一半吞吐）、CPU 上完全不要用；

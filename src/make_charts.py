@@ -252,15 +252,15 @@ def speed_gpu_bar():
 # ---------- 6. 体积 vs 准确率权衡 ----------
 def tradeoff_scatter():
     fig, ax = plt.subplots(figsize=(11, 6))
-    # (体积MB, MNIST准确率, 名称, 颜色, 标注偏移)。fp32 与 fp32+compile 权重相同
+    # (体积MB, MNIST准确率, 名称+设备, 颜色, 标注偏移)。fp32 与 fp32+compile 权重相同
     # （compile 只编译计算图），体积/精度完全一致，故共用一点；其优势在速度维度，不在本图两轴。
     pts = [
-        (12.64, 99.04, "fp32 与 fp32+compile（权重相同，仅推理速度不同：compile 快 15-40%）", C_BLUE, (12, -14)),
-        (6.47, 99.04, "bf16 混合", C_ORANGE, (12, 8)),
-        (6.42, 99.04, "TRT fp16 引擎", "#E8B48A", (12, -16)),
-        (3.44, 99.05, "int8 动态", C_GREEN, (12, 8)),
-        (3.20, 98.98, "int8 静态", "#8BC79A", (12, -14)),
-        (2.24, 99.04, "int4 weight-only", C_PURPLE, (12, -14)),
+        (12.64, 99.04, "fp32 与 fp32+compile（CPU/GPU 通用，权重相同）", C_BLUE, (12, -14)),
+        (6.47, 99.04, "bf16 混合（CPU/GPU）", C_ORANGE, (12, 8)),
+        (6.42, 99.04, "TRT fp16 引擎（GPU）", "#E8B48A", (12, -16)),
+        (3.44, 99.05, "int8 动态（CPU）", C_GREEN, (12, 8)),
+        (3.20, 98.98, "int8 静态（CPU）", "#8BC79A", (12, -14)),
+        (2.24, 99.04, "int4 weight-only（GPU）", C_PURPLE, (12, -14)),
     ]
     for size, acc, name, c, offset in pts:
         ax.scatter(size, acc, s=150, color=c, edgecolor="white", zorder=5, linewidth=1.2)
