@@ -250,6 +250,47 @@ def speed_gpu_bar():
 
 
 # ---------- 6. 体积 vs 准确率权衡 ----------
+def latency_p50():
+    """各模型形态的 P50 延迟对比（对数轴），CPU 与 GPU 分组。数据与 06_results 一致。"""
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    # (名称, P50 ms, 平台, 颜色)
+    rows = [
+        ("fp32", 0.592, "CPU", C_BLUE),
+        ("fp32+compile", 0.510, "CPU", "#9CB3D5"),
+        ("bf16 混合", 20.9, "CPU", C_ORANGE),
+        ("int8 动态", 0.563, "CPU", C_GREEN),
+        ("int8 静态", 0.242, "CPU", "#8BC79A"),
+        ("TRT fp32", 0.180, "GPU", C_BLUE),
+        ("TRT bf16", 0.158, "GPU", C_ORANGE),
+        ("TRT fp16", 0.125, "GPU", C_GREEN),
+        ("TRT int8", 0.085, "GPU", "#7BC49A"),
+        ("torchao int4wo", 16.05, "GPU", C_PURPLE),
+    ]
+    xs = np.arange(len(rows))
+    vals = [r[1] for r in rows]
+    colors = [r[3] for r in rows]
+    # CPU/GPU 分组底色
+    ax.axhspan(0, 100, color="none")
+    ax.bar(xs, vals, color=colors, edgecolor="white", width=0.6)
+    for x, v in zip(xs, vals):
+        ax.text(x, v * 1.15, f"{v:g}", ha="center", fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="#f5f5f5", edgecolor="#ccc", lw=0.5))
+    ax.set_yscale("log")
+    ax.set_ylim(0.05, 80)
+    labels = [f"{r[0]}\n({r[2]})" for r in rows]
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_ylabel("P50 延迟（ms，batch=1，对数刻度）", fontsize=11)
+    ax.set_title("各模型形态的 P50 延迟：int8 静态（CPU）与 TRT int8/fp16（GPU）最快；bf16/torchao 在本机为反例", fontsize=12)
+    # 平台分隔线
+    ax.axvline(4.5, color="gray", ls="--", lw=1, alpha=0.6)
+    ax.text(2, 60, "CPU（i5-13490F）", ha="center", fontsize=10.5, color="#555")
+    ax.text(7.2, 60, "GPU（RTX 3060）", ha="center", fontsize=10.5, color="#555")
+    ax.grid(alpha=0.3, axis="y"); ax.set_axisbelow(True)
+    fig.tight_layout()
+    save(fig, "latency_p50.png")
+
+
 def tradeoff_scatter():
     fig, ax = plt.subplots(figsize=(11, 6))
     # (体积MB, MNIST准确率, 名称+设备, 颜色, 标注偏移)。fp32 与 fp32+compile 权重相同
@@ -258,20 +299,31 @@ def tradeoff_scatter():
         (12.64, 99.04, "fp32 与 fp32+compile（CPU/GPU 通用，权重相同）", C_BLUE, (12, -14)),
         (6.47, 99.04, "bf16 混合（CPU/GPU）", C_ORANGE, (12, 8)),
         (6.42, 99.04, "TRT fp16 引擎（GPU）", "#E8B48A", (12, -16)),
-        (3.44, 99.05, "int8 动态（CPU）", C_GREEN, (12, 8)),
-        (3.20, 98.98, "int8 静态（CPU）", "#8BC79A", (12, -14)),
-        (2.24, 99.04, "int4 weight-only（GPU）", C_PURPLE, (12, -14)),
+        (3.44, 99.05, "int8 动态（仅 CPU）", C_GREEN, (12, 8)),
+        (3.30, 99.79, "TRT int8 引擎（GPU）", "#7BC49A", (14, -4)),
+        (3.20, 98.98, "int8 静态（仅 CPU）", "#8BC79A", (10, -26)),
+        (2.24, 99.04, "int4 weight-only（GPU）", C_PURPLE, (10, 10)),
     ]
+    # (体积MB, 准确率, 名称, 颜色, 标注位置)：pos 用数据坐标（x, y 是标注中心），ha 决定对齐
+    pos = {
+        "fp32 与 fp32+compile": (12.75, 99.005, "left"),
+        "bf16 混合": (7.05, 99.07, "left"),
+        "TRT fp16 引擎": (7.05, 99.005, "left"),
+        "int8 动态": (4.05, 99.075, "left"),
+        "TRT int8 引擎": (3.85, 99.79, "left"),
+        "int8 静态": (2.6, 98.935, "left"),
+        "int4 weight-only": (1.45, 99.115, "left"),
+    }
     for size, acc, name, c, offset in pts:
         ax.scatter(size, acc, s=150, color=c, edgecolor="white", zorder=5, linewidth=1.2)
-        # 名称 + 坐标一起标注，避免重叠
-        ax.annotate(f"{name}\n({size:.2f} MB, {acc:.2f}%)", (size, acc),
-                    textcoords="offset points", xytext=offset, fontsize=9.5,
-                    ha="left", va="center" if abs(offset[1]) < 10 else "top" if offset[1] < 0 else "bottom",
-                    linespacing=1.4)
+        x_pos, y_pos, ha = pos[name.split("（")[0]]
+        ax.annotate(f"{name}\n({size:.2f} MB, {acc:.2f}%)", (x_pos, y_pos),
+                    fontsize=8.2, ha=ha, va="top", linespacing=1.25,
+                    arrowprops=dict(arrowstyle="-", color="gray", lw=0.8)
+                    if name == "int4 weight-only" else None)
     ax.set_xlabel("模型大小（MB）", fontsize=11)
     ax.set_ylabel("MNIST 测试准确率（%）", fontsize=11)
-    ax.set_ylim(98.90, 99.18)
+    ax.set_ylim(98.88, 99.87)
     ax.set_xlim(1.2, 14.5)
     ax.set_title("体积 vs 精度权衡：量化到 int4 仍保持 99%+（MNIST 任务简单）\n更难任务上静态量化会掉精度，见 Fashion-MNIST 验证", fontsize=12.5)
     ax.grid(alpha=0.3); ax.set_axisbelow(True)
@@ -435,6 +487,7 @@ if __name__ == "__main__":
     speed_cpu_bar()
     speed_gpu_bar()
     tradeoff_scatter()
+    latency_p50()
     hw_precision_matrix()
     precision_timeline()
     calibration_chart()

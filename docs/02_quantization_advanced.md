@@ -4,7 +4,7 @@
 > **前置知识**：读完 [01 · 量化入门](./01_quantization_basics.md)（量化三步公式、PTQ/QAT、动态 vs 静态）。
 > **本篇不覆盖**：同一精度在不同硬件上为什么快慢差 40 倍（[03 · 硬件架构](./03_hardware.md)）；性能数据怎么测才可信（[04 · 如何读懂性能数据](./04_reading_benchmarks.md)）。
 >
-> 所有结论都来自本项目的真实实验（MNIST CNN，200 万参数），复现命令见 [06 · 完整实验结果](./06_results.md)。深水区内容集中在 [05 · 量化深水区](./05_quantization_deep_dives.md)，初学可跳过，不影响主线。
+> **预计学习时长**：约 13 分钟。所有结论都来自本项目的真实实验（MNIST CNN，约 330 万参数），复现命令见 [06 · 完整实验结果](./06_results.md)。深水区内容集中在 [05 · 量化深水区](./05_quantization_deep_dives.md)，初学可跳过，不影响主线。
 
 ## 1. Q2：量化的另一种形式——浮点量化（fp16/bf16）
 
@@ -134,33 +134,39 @@ QAT（量化感知训练）：把 [fake-quant](./00_glossary.md) 节点插进模
 ## 自测：你学会了吗
 
 <details>
-<summary>1. bf16 和 fp16 同为 16 位，大模型训练为什么偏爱 bf16？</summary>
+<summary>1.【基础】bf16 和 fp16 同为 16 位，大模型训练为什么偏爱 bf16？</summary>
 
 bf16 的指数位与 fp32 相同（8 位），数值范围一样大、训练不易溢出，不需要 GradScaler；fp16 指数位只有 5 位，大值上溢成 inf、小梯度下溢，必须配 GradScaler。代价是 bf16 尾数位少、精度低。
 </details>
 
 <details>
-<summary>2. 浮点量化和混合精度是什么关系？weight-only 量化算混合精度吗？</summary>
+<summary>2.【基础】浮点量化和混合精度是什么关系？weight-only 量化算混合精度吗？</summary>
 
 浮点量化说"用什么格式"（16 位浮点位域），混合精度说"怎么用"（层间/张量间精度不均匀，训练场景另指 fp32 主副本 + 低精度计算）。纯 fp16 模型是浮点量化但不是混合；本项目 `make_bf16_mixed` 两者都占。weight-only 不算：它的权重是整数路线，且每层统一"权重 int8/int4 + 激活 bf16"，层间并无不均匀。按"激活处理"分类，它和 bf16 混合同属**不量化**态——另两态是动态/静态（见 §1.4 全景表）。
 </details>
 
 <details>
-<summary>3. 静态量化在 Fashion-MNIST 上掉了 5.23%，根本原因是什么？为什么加大校准数据量救不回？</summary>
+<summary>3.【基础】静态量化在 Fashion-MNIST 上掉了 5.23%，根本原因是什么？为什么加大校准数据量救不回？</summary>
 
 校准数据分布与真实输入不一致：用 MNIST 的归一化参数（0.1307）校准 Fashion-MNIST 模型（正确值 0.2860），等于给所有输入平移了半个标准差——系统性错位而非统计噪声，数据越多越确认错误的 scale，所以 16384 张错分布数据仍掉 5.6%。同分布校准（对照组）只掉 0.19%。
 </details>
 
 <details>
-<summary>4. 「把整个训练集都拿来校准，就不会分布错配」——这个说法对吗？</summary>
+<summary>4.【进阶】「把整个训练集都拿来校准，就不会分布错配」——这个说法对吗？</summary>
 
 不对。数据量再大也只能代表**训练时的分布**：真实推理输入的分布无法预先判断（用户图片可能更模糊/偏色/来自没见过的域，预处理管线也可能部署时被改错——本事故正是后一种）。且分布正确时 256 张就够、加量无收益。所以"多喂训练集数据"买不来保险，需要防守的是「训练分布 ≠ 线上分布」这个不确定性（分位数截断、per-channel 就是为它留余量）。
 </details>
 
 <details>
-<summary>5. PTQ 掉精度时的标准解法是什么？成本如何？</summary>
+<summary>5.【基础】PTQ 掉精度时的标准解法是什么？成本如何？</summary>
 
 QAT（量化感知训练）：插 fake-quant 微调几个 epoch，让权重适应量化约束。本实验仅 3 epoch / 29 秒，从 87.45% 恢复到 93.95%，还反超 fp32 基线 1.3%。
+</details>
+
+<details>
+<summary>6.【应用】Transformer 模型（如 BERT）与 CNN 模型（如 ResNet）各自更适合哪些量化方式？为什么？</summary>
+
+Transformer 的计算量 100% 由 Linear 承担（Attention 的 QKV 投影 + FFN），动态量化（只量化 Linear）能覆盖其计算主体——适合零校准快速验证；但因层数深、激活范围随序列波动，生产上更常用静态量化或 QAT/weight-only。CNN 的计算大头是 Conv，动态量化覆盖不了——必须静态量化（Conv 也要 int8）或 weight-only。权衡细节见 [05 · 深水区⑯](./05_quantization_deep_dives.md)。
 </details>
 
 ---

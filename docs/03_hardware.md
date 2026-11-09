@@ -4,6 +4,8 @@
 > **前置知识**：读完 [01 · 量化入门](./01_quantization_basics.md)与 [02 · 量化进阶](./02_quantization_advanced.md)（认识 fp32/int8/bf16 等精度格式）。
 > **本篇不覆盖**：这些速度数字是怎么测出来的（[04 · 如何读懂性能数据](./04_reading_benchmarks.md)）。
 >
+> **预计学习时长**：约 12 分钟。
+>
 > 核心结论一句话：**精度格式的实际速度取决于硬件是否为它提供原生执行单元，软件只是把硬件能力翻译出来。** 深水区内容集中在 [05 · 量化深水区](./05_quantization_deep_dives.md)（本篇对应 ⑪-⑭），初学可跳过，不影响主线。
 
 本篇的展开方式：先用两个最反直觉的实验现象提问（bf16 在 CPU 上慢 40 倍、在 GPU 上反而快一倍），再看 CPU/GPU 内部发生了什么来回答，最后把所有现象收进一张硬件-精度匹配矩阵。
@@ -42,7 +44,7 @@ CPU 做神经网络计算，靠的是 **[SIMD](./00_glossary.md) 向量指令**�
 - `AVX_VNNI`：int8 点积专用，一条指令完成 4 组 8-bit 乘加（`vpdpbusd`）——int8 乘加主体走 VNNI，[requantize](./00_glossary.md)/裁剪/搬移等辅助运算仍走 AVX2，两者配合构成完整 int8 推理路径；
 - `AVX512-BF16` / `AMX`：bf16 向量运算 / 瓦片矩阵乘——**本机没有**。
 
-**为什么 bf16 在 CPU 上慢 40 倍**（22.4 vs 0.573 ms）：
+**为什么 bf16 在 CPU 上慢 40 倍**（22.4 vs 0.573 ms；数字来自本篇批次的实测，[01](./01_quantization_basics.md) 的 20.9/0.592 ms 是另一批，批间波动 ±3%）：
 
 ![CPU 延迟对比](../assets/speed_cpu_bar.png)
 
@@ -89,6 +91,36 @@ GPU 靠**海量并行**：3,584 个 [CUDA 核心](./00_glossary.md)同时算不�
 | kernel 自动调优 | 通用 kernel，不针对具体 GPU 形状 | 构建期对本机 GPU 实测几十种实现选最快 | 针对 28 个 SM 精调 |
 
 **注意**：PyTorch 的 `quantize_dynamic` 只有 CPU 实现（依赖 oneDNN/FBGEMM），int8 想在 GPU 上跑必须走 TensorRT（QDQ 显式量化）或 torchao。
+
+### GPU 上的 kernel 是谁实现的——cuDNN/cuBLAS 的角色
+
+§2 讲过 CPU 侧的 oneDNN；GPU 侧对应的是 **cuDNN**（conv/pooling/BN/激活等深度学习原语）和 **cuBLAS/cuBLASLt**（GEMM 矩阵乘）——NVIDIA 提供的加速库。但它们不是唯一的 kernel 来源，完整图景是三层：
+
+| 层 | 角色 | GPU 侧 | CPU 侧 |
+|---|---|---|---|
+| 框架 | 决定"调用哪个实现" | PyTorch eager / TensorRT / torch.compile | 同左 |
+| 加速库 | 提供**现成的 kernel 集合与挑选机制**（每个算子内部几十种实现，按张量形状/硬件实测选） | cuDNN（conv 类主力）、cuBLASLt（GEMM） | oneDNN |
+| 自生成 kernel | 框架自己编译生成的特化 kernel | TensorRT 自家 kernel、torch.compile 的 Triton 生成 | oneDNN JIT |
+
+由此澄清一个易混点：**cuDNN 不是"kernel 融合"的发生地**——它提供单个算子的 kernel 候选；把 Conv+BN+ReLU+requantize 合并成一个 kernel 的融合，发生在框架层（TRT 构建期 / torch.compile 编译期 / oneDNN 的图模式）。TRT 构建期"实测几十种实现选最快"的候选来源就是自家 kernel + cuDNN + cuBLASLt。
+
+### 补充深入：`.to("cuda")` 之后，每个 kernel 都要写回显存吗
+
+要——`.to("cuda")` 只是把数据搬进显存，**不改变 GPU 上独立 kernel 的执行约定**。GPU 的内存是分层的，一次独立 kernel 执行的数据流：
+
+```
+全局显存（HBM，12 GB，~360 GB/s）
+   ↓ 读入
+L2 缓存（2.25 MB）→ 寄存器 / shared memory（SM 内，最快）→ 计算
+   ↓ 结果写回全局显存
+```
+
+单个 kernel（如独立的 Conv）**结束时必须把输出写回全局显存**——下一个 kernel（如 ReLU）要从显存把它读出来，即使数据物理上还在 L2 里，逻辑上也是两次内存事务加一次 kernel 边界同步。这就是上表"消除中间显存读写"的展开：**融合后，ReLU 的输入是 Conv 结果在寄存器里的值，数据不落全局显存，只有最终输出写一次**。
+
+两个易混点：
+
+- **异步执行不影响这个结论**：PyTorch 的算子调用是异步的（Python 不等 kernel 跑完），但 kernel 之间仍有数据依赖（ReLU 必须等 Conv 写完才能读），依赖链上的 kernel 无法重叠——融合正是把依赖链在硬件层面缩短；
+- **"写回显存"的代价对小模型反而更显著**：28×28 张量的计算本身只要几微秒，而 kernel 启动 + 同步 + 内存事务的固定开销每次几微秒——计算越轻，这些开销占比越高（与 CPU 上"分发占比 >80%"同一逻辑）。
 
 ## 4. 硬件-精度匹配矩阵（把前面的现象收进一张地图）
 
@@ -153,38 +185,43 @@ GPU 靠**海量并行**：3,584 个 [CUDA 核心](./00_glossary.md)同时算不�
 
 ## 自测：你学会了吗
 
+> 建议先不看答案自答，再展开对照。难度标注：基础 = 正文可直接查到；进阶 = 需要推导或跳查深水区。
+
+**基础**
+
 <details>
-<summary>1. 同一个 bf16 模型，为什么在 CPU 上慢 40 倍、在消费级 GPU 上却比 fp32 快一倍？</summary>
+<summary>1.【基础】同一个 bf16 模型，为什么在 CPU 上慢 40 倍、在消费级 GPU 上却比 fp32 快一倍？</summary>
 
 同一根源：硬件有没有为 bf16 造原生执行单元。CPU（i5-13490F）没有 AVX512-BF16/AMX，oneDNN 走仿真路径（转 fp32 再算，还多两次转换）；RTX 3060 的 Tensor Core 原生支持 BF16 矩阵乘，吞吐翻倍。
 </details>
 
 <details>
-<summary>2. 消费级 GPU 上，TRT bf16 的吞吐为什么只有 TRT fp16 的一半？</summary>
+<summary>2.【基础】消费级 GPU 上，TRT bf16 的吞吐为什么只有 TRT fp16 的一半？</summary>
 
 Tensor Core 是固定功能电路：Ampere GA10x 每 SM 每 clock 的 FP16 Tensor 吞吐 256 FMA、BF16 只有 128 FMA——物理上乘法阵列就少一半。原因是市场定位：fp16 是消费卡主场，bf16 服务数据中心训练卡（A100 上两者相等）。
 </details>
 
 <details>
-<summary>3. TRT 比 PyTorch eager 快 30-100 倍，根源是什么？</summary>
+<summary>3.【基础】TRT 比 PyTorch eager 快 30-100 倍，根源是什么？</summary>
 
 执行方式而非精度：无 Python 分发（引擎一次调用执行整图）、算子融合（Conv+BN+ReLU 一个 kernel）、kernel 自动调优（构建期对本机 GPU 实测选最快实现）。
 </details>
 
 <details>
-<summary>4. 为什么 int8 在 CPU 上反而最快，而 bf16 最慢？</summary>
+<details>
+<summary>4.【进阶】为什么 int8 在 CPU 上反而最快，而 bf16 最慢？</summary>
 
 三个原因：量化是一次性完成、写死进模型的，推理时直接 int8 运算，没有反复转换；AVX_VNNI 指令原生支持 int8 点积；权重体积减半 → 内存带宽压力减半（小模型推理瓶颈常在内存访问）。bf16 则完全没有原生执行单元，只能走仿真。
 </details>
 
 <details>
-<summary>5. 部署前应该对目标硬件检查哪三件事？</summary>
+<summary>5.【基础】部署前应该对目标硬件检查哪三件事？</summary>
 
 ① CPU 指令集（lscpu 查 AVX_VNNI/AVX512-BF16/AMX）；② GPU 架构（nvidia-smi 查 compute capability，8.6+ 才有 bf16/INT8 Tensor Core）；③ 推理引擎（PyTorch int8 只有 CPU 实现，GPU int8 走 TRT/torchao）。
 </details>
 
 <details>
-<summary>6. （进阶）int8 的乘加本身有舍入误差吗？</summary>
+<summary>6.【进阶】int8 的乘加本身有舍入误差吗？</summary>
 
 没有。int8×int8 的乘积完整落在 int32 里，乘加是纯精确整数运算；int8 的全部误差发生在进入整数域之前的量化映射（round + clip）那一步。浮点格式（bf16/fp16）则相反——误差在乘法输入端截断尾数。（完整的乘法/加法精度行为对比见 [05 · 深水区⑪](./05_quantization_deep_dives.md)）
 </details>
